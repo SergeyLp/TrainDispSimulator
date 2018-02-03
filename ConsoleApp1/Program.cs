@@ -60,6 +60,8 @@ namespace Ralway{
 
 
     class Program{
+
+
         static void Main(string[] args){
             Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
             Branch branch = new Branch();
@@ -96,6 +98,24 @@ namespace Ralway{
                     speed_map.Add(dist, speed);
                 }
             }
+            IList<double> speed_points = speed_map.Keys;
+
+            double a = 0.25;    // m/s^2
+            const double v_max_loc = 120 / 3.6; // m/s
+
+            SortedList<double, double> speed_prepare_list = new SortedList<double, double>();
+            double v_prev =0;
+            foreach (var dist in speed_points) {
+                double vx = speed_map[dist]/3.6;
+                double dv = vx - v_prev;
+                if (dv < 0) {
+                    double t = -dv / a;
+                    double dist_prep = v_prev * t + a * t * t / 2;
+                    Console.Write("{0} {1} {2}\n", v_prev * 3.6, vx * 3.6, dist_prep);
+                    speed_prepare_list.Add(dist - dist_prep, vx);
+                }
+                v_prev = vx;
+            }
 
             //branch.Dump();
 
@@ -105,32 +125,40 @@ namespace Ralway{
             IList<double> time_points = stations_map.Keys;
             int station_number = 0;
 
-            const double v_max_loc = 120 / 3.6;
-            IList<double> speed_points = speed_map.Keys;
+            //IList<double> speed_points = speed_map.Keys;
             int speed_index = 0;
-            double v = 0;
-            double dp = 0;
-            double sec_from_0 = 0;
-            double dt = 0.1;
-            double pos = 0;
+            double v = 0, v0 =0;    // m/s
+            double dp = 0, pos = 0; // m
+            double sec_from_0 = 0;  // s
+            double dt = 0.1;    // s
+            double speed_restict = 0;   // m/s
+
+
             for (; ; ) {
-                
                 if ((speed_index < speed_points.Count) && (pos >= speed_points[speed_index] * 1000)) {
-                    v = speed_map[speed_points[speed_index++]] / 3.6;
-                    v = (v < v_max_loc) ? v : v_max_loc;
+                    speed_restict = speed_map[speed_points[speed_index++]] / 3.6;
                 }
 
-                dp = v * dt;
+                v = v0 + a * dt;
+                v = (v <= speed_restict) ? v : speed_restict;
+                v = (v <= v_max_loc) ? v : v_max_loc;
+
+                dp = (v0 + v)/2 * dt ;
                 pos += dp;
+                v0 = v;
+
+                if (Math.Abs(v - speed_restict) > 0.2) {
+                    ///Need change speed
+                }
 
                 DateTime date = date0.AddSeconds(sec_from_0);
-                Console.Write("{0:t}\t{1:##0.0}\t{2,3}", date, pos/1000, v * 3.6);
+                Console.Write("{0:t}\t{1:##0.0}\t{2,3}", date, pos/1000, (int)(v * 3.6));
                 if (pos >= time_points[station_number] * 1000) {
                     Console.Write("  {0}\n", stations_map[time_points[station_number]]);
                     if (++station_number == time_points.Count) break;
                 } else
                     Console.Write("\r");
-                //Thread.Sleep(10);
+                //Thread.Sleep(1);
                 sec_from_0 += dt;
             }
             Console.Write("\n\t\t<<PRESS ENTER>>");
