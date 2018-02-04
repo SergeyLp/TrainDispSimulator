@@ -66,6 +66,10 @@ namespace Ralway{
     class Game{
         static void Main(string[] args){
             Branch branch = new Branch();
+
+            double a_loco = 0.2;    // m/s^2
+            const double speed_max_loco_restrict = 120 / 3.6; // m/s
+
             SortedList<double, string> stations_map = new SortedList<double, string>();
             using (StreamReader reader = File.OpenText(@"D:\Win7\lis\Documents\Dev\RW\Выборг.layout")){
                 string text;
@@ -101,24 +105,21 @@ namespace Ralway{
             }
             IList<double> speed_points = speed_map.Keys;
 
-            double a_loco = 0.2;    // m/s^2
-            const double speed_max_loco_restrict = 120 / 3.6; // m/s
-
-            SortedList<double, double> speed_prepare_list = new SortedList<double, double>();
-            double v_prev =0;
             Trace.WriteLine("Table prepare speed restrict");
+            SortedList<int, double> dist_deceleration_list = new SortedList<int, double>();
+            double prev_speed_restrict =0;
+            int i = 0;
             foreach (var dist in speed_points) {
-                double vx = speed_map[dist]/3.6;
-                double dv = vx - v_prev;
-                if (dv < 0) {
-                    double t = -dv / a_loco;
-                    double dist_prep = v_prev * t + a_loco * t * t / 2;
-                    Trace.Write(String.Format("{0} {1} {2:#,0.000} {3}\n", v_prev * 3.6, vx * 3.6, dist - dist_prep/1000, (int)dist_prep));
-                    speed_prepare_list.Add(dist*1000 - dist_prep, vx);
+                double speed_restrict = speed_map[dist]/3.6;
+                double delta_speed = speed_restrict - prev_speed_restrict;
+                if (delta_speed < 0) {
+                    double t = -delta_speed / a_loco;
+                    double space_deceleration = prev_speed_restrict * t + a_loco * t * t / 2;
+                    Trace.Write(String.Format("{0} {1} {2:#,0.000} {3}\n", prev_speed_restrict * 3.6, speed_restrict * 3.6, dist - space_deceleration/1000, (int)space_deceleration));
+                    dist_deceleration_list.Add(i++, dist*1000 - space_deceleration);
                 }
-                v_prev = vx;
+                prev_speed_restrict = speed_restrict;
             }
-            IList<double> speed_prep_points = speed_prepare_list.Keys;
 
             branch.Dump();
 
@@ -135,11 +136,10 @@ namespace Ralway{
             double dt = 0.05;    // s
             double current_speed_restict = 0;   // m/s
             double next_speed_restict = 0;   // m/s
-            int speed_prep_index = 0;
-            double speed_prep_dist = 0;
+            int dist_deceleration_idx = 0;
+            double dist_deceleration = 0;
             double a = a_loco;
             for (; ; ) {
-                
                 if ((speed_index < speed_points.Count) && (pos >= speed_points[speed_index] * 1000)) {
                     current_speed_restict = speed_map[speed_points[speed_index++]] / 3.6;
                     current_speed_restict = (current_speed_restict > speed_max_loco_restrict)
@@ -155,8 +155,8 @@ namespace Ralway{
                     }
                 }
 
-                if ((speed_prep_index < speed_prep_points.Count) && (pos >= speed_prep_points[speed_prep_index])) {
-                    speed_prep_dist = speed_prep_points[speed_prep_index++];
+                if ((dist_deceleration_idx < dist_deceleration_list.Count) && (pos >= dist_deceleration_list[dist_deceleration_idx])) {
+                    dist_deceleration = dist_deceleration_list[dist_deceleration_idx++];
                     a = -a_loco;
                 }
 
