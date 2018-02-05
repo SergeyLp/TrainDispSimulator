@@ -62,12 +62,25 @@ namespace Ralway{
         }
     }
 
-    class Game{
+    public struct SpaceDeceleration {
+        public double begin;
+        public double speed;
+        public double end;
+
+        public SpaceDeceleration(double begin_, double end_, double speed_) {
+            begin = begin_;
+            end = end_;
+            speed = speed_;
+        }
+    };
+
+    class Game {
         static void Main(string[] args){
             //Branch branch = new Branch();
 
-            double a_loco = 0.2;    // m/s^2
+            const double a_loco = 0.15;    // m/s^2
             const double speed_max_loco_restrict = 120 / 3.6; // m/s
+            const double dt = 0.05;    // s
 
             SortedList<double, string> stations_map = new SortedList<double, string>();
             using (StreamReader reader = File.OpenText(@"D:\Win7\lis\Documents\Dev\RW\Выборг.layout")){
@@ -80,7 +93,7 @@ namespace Ralway{
                     string[] data = text.Split(new char[] { ' ', '\t'}, StringSplitOptions.RemoveEmptyEntries);
                     if (data.Length < 2) continue;
                     string name = data[0].Replace('_', ' ');
-                    double dist = double.Parse(data[2]);
+                    double dist = double.Parse(data[2]) * 1000;
                     double length = dist - last_dist;
                     last_dist = dist;
                     //branch.AddElement(name, length);
@@ -88,8 +101,9 @@ namespace Ralway{
                 }
                 //branch.Dump();
             }
-            SortedList<double, double> speed_map = new SortedList<double, double>();
+            IList<double> time_points = stations_map.Keys;
 
+            SortedList<double, double> speed_map = new SortedList<double, double>();
             using (StreamReader reader = File.OpenText(@"D:\Win7\lis\Documents\Dev\RW\Выборг.speed")) {
                 string text;
                 while ((text = reader.ReadLine() )!= null) {
@@ -99,24 +113,24 @@ namespace Ralway{
                     }
                     string[] data = text.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                     if (data.Length < 2) continue;
-                    double dist = double.Parse(data[0]);
-                    double speed = double.Parse(data[1]);
+                    double dist = double.Parse(data[0]) * 1000;
+                    double speed = double.Parse(data[1])/3.6 ;
                     speed_map.Add(dist, speed);
                 }
             }
             IList<double> speed_points = speed_map.Keys;
 
             Trace.WriteLine("Table prepare speed restrict");
-            Queue<double> dist_deceleration_q = new Queue<double>();
+            Queue<SpaceDeceleration> dist_decelerations = new Queue<SpaceDeceleration>();
             double prev_speed_restrict =0;
             foreach (var dist in speed_points) {
-                double speed_restrict = speed_map[dist]/3.6;
+                double speed_restrict = speed_map[dist];
                 double delta_speed = speed_restrict - prev_speed_restrict;
                 if (delta_speed < 0) {
                     double t = -delta_speed / a_loco;
-                    double space_deceleration = prev_speed_restrict * t + a_loco * t * t / 2;
-                    Trace.Write(String.Format("{0} {1} {2:#,0.000} {3}\n", prev_speed_restrict * 3.6, speed_restrict * 3.6, dist - space_deceleration/1000, (int)space_deceleration));
-                    dist_deceleration_q.Enqueue(dist * 1000 - space_deceleration);
+                    double space = prev_speed_restrict * t + a_loco * t * t / 2;
+                    Trace.Write(String.Format("{0} {1} {2:##0.0} {3:##0.0}\n", prev_speed_restrict * 3.6, speed_restrict * 3.6, (dist - space)/1000, dist / 1000));
+                    dist_decelerations.Enqueue(new SpaceDeceleration(dist - space, dist, speed_restrict) );
                 }
                 prev_speed_restrict = speed_restrict;
             }
@@ -124,36 +138,64 @@ namespace Ralway{
             DateTime date0 = new DateTime(2009, 5, 1, 16, 30, 0);
             Console.Write("{0}\n", date0);
 
-            IList<double> time_points = stations_map.Keys;
             int station_number = 0;
-
             int speed_index = 0;
             double v = 0, v0 =0;    // m/s
             double dp = 0, pos = 0; // m
             double sec_from_0 = 0;  // s
-            double dt = 0.05;    // s
             double current_speed_restict = 0;   // m/s
             double next_speed_restict = 0;   // m/s
-            double dist_deceleration = dist_deceleration_q.Dequeue(); ;
+            SpaceDeceleration space_deceleration = dist_decelerations.Dequeue();
             double a = a_loco;
+            double end_deceleration = 0;
+            Queue<SpaceDeceleration> current_decelerations = new Queue<SpaceDeceleration>();
             for (; ; ) {
-                if ((speed_index < speed_points.Count) && (pos >= speed_points[speed_index] * 1000)) {
-                    current_speed_restict = speed_map[speed_points[speed_index++]] / 3.6;
+                DateTime date = date0.AddSeconds(sec_from_0);
+
+                if ((speed_index < speed_points.Count) && (pos >= speed_points[speed_index])) {
+                    current_speed_restict = speed_map[speed_points[speed_index++]] ;
                     current_speed_restict = (current_speed_restict > speed_max_loco_restrict)
                                     ? speed_max_loco_restrict
                                     : current_speed_restict;
-                    a = +a_loco;
+                    if (a == 0 && !current_decelerations.Any()) {
+                        a = +a_loco;
+                        Trace.WriteLine(String.Format("A+ at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
+                    }
                     if (speed_index < speed_points.Count) {
-                        next_speed_restict = speed_map[speed_points[speed_index]] / 3.6;
+                        next_speed_restict = speed_map[speed_points[speed_index]] ;
                         next_speed_restict = (next_speed_restict > speed_max_loco_restrict)
                                         ? speed_max_loco_restrict
                                         : next_speed_restict;
                     }
                 }
 
-                if (pos >= dist_deceleration) {
-                    dist_deceleration = (dist_deceleration_q.Count > 0) ? dist_deceleration_q.Dequeue(): 9e99;
+                if (a < 0 && (pos > space_deceleration.begin || v < space_deceleration.speed) ) { 
+                    a = 0;
+                    Trace.WriteLine(String.Format("A0 at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
+                }
+
+                if (v > current_speed_restict - 0.05 && a > 0) {
+                    Trace.WriteLine(String.Format("A\\ at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
+                    a = 0;
+                }
+
+                if (pos >= space_deceleration.begin) {
+                    current_decelerations.Enqueue(space_deceleration);
+                    Trace.WriteLine(String.Format("C+ at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
+                    end_deceleration = space_deceleration.begin;
+                    if (dist_decelerations.Count > 0) {
+                        space_deceleration = dist_decelerations.Dequeue();
+                    } else {
+                        space_deceleration.begin = 99e99;
+                    }
+
+                    Trace.WriteLine(String.Format("A- at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
                     a = -a_loco;
+                }
+
+                if (current_decelerations.Any() && pos > current_decelerations.Peek().end) {
+                    current_decelerations.Dequeue();
+                    Trace.WriteLine(String.Format("C- at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
                 }
 
                 v = v0 + a * dt;
@@ -161,19 +203,19 @@ namespace Ralway{
                 pos += dp;
                 v0 = v;
 
-                if ((a < 0) && (v <= next_speed_restict) && (v <= current_speed_restict))
-                    a = 0;
+                Console.Write("{0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos/1000, v * 3.6);
 
-                if (v >= current_speed_restict)
-                    a = 0;
-
-                DateTime date = date0.AddSeconds(sec_from_0);
-                Console.Write("{0:t}\t{1:##0.000}\t{2,3}", date, pos/1000, (int)(v * 3.6));
-                if (pos >= time_points[station_number] * 1000) {
+                if (pos >= time_points[station_number]) {
                     Console.Write("  {0}\n", stations_map[time_points[station_number]]);
                     if (++station_number == time_points.Count) break;
-                } else
-                    Console.Write("\r");
+                } else {
+                    if (v > current_speed_restict + 0.5) {
+                        Console.Write("  {0:##0.0} !\n", current_speed_restict * 3.6);
+                        Trace.WriteLine(String.Format("*! at {0,-8:t}  {1:##0.000}  {2:##0.0}  {3:##0.0}", date, pos / 1000, v * 3.6, current_speed_restict * 3.6));
+                        v = current_speed_restict;
+                    } else
+                        Console.Write("\r");
+                }
                 //Thread.Sleep(5);
                 sec_from_0 += dt;
             }
