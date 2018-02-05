@@ -106,9 +106,8 @@ namespace Ralway{
             IList<double> speed_points = speed_map.Keys;
 
             Trace.WriteLine("Table prepare speed restrict");
-            SortedList<int, double> dist_deceleration_list = new SortedList<int, double>();
+            Queue<double> dist_deceleration_q = new Queue<double>();
             double prev_speed_restrict =0;
-            int i = 0;
             foreach (var dist in speed_points) {
                 double speed_restrict = speed_map[dist]/3.6;
                 double delta_speed = speed_restrict - prev_speed_restrict;
@@ -116,7 +115,7 @@ namespace Ralway{
                     double t = -delta_speed / a_loco;
                     double space_deceleration = prev_speed_restrict * t + a_loco * t * t / 2;
                     Trace.Write(String.Format("{0} {1} {2:#,0.000} {3}\n", prev_speed_restrict * 3.6, speed_restrict * 3.6, dist - space_deceleration/1000, (int)space_deceleration));
-                    dist_deceleration_list.Add(i++, dist*1000 - space_deceleration);
+                    dist_deceleration_q.Enqueue(dist * 1000 - space_deceleration);
                 }
                 prev_speed_restrict = speed_restrict;
             }
@@ -136,8 +135,7 @@ namespace Ralway{
             double dt = 0.05;    // s
             double current_speed_restict = 0;   // m/s
             double next_speed_restict = 0;   // m/s
-            int dist_deceleration_idx = 0;
-            double dist_deceleration = 0;
+            double dist_deceleration = dist_deceleration_q.Dequeue(); ;
             double a = a_loco;
             for (; ; ) {
                 if ((speed_index < speed_points.Count) && (pos >= speed_points[speed_index] * 1000)) {
@@ -155,8 +153,8 @@ namespace Ralway{
                     }
                 }
 
-                if ((dist_deceleration_idx < dist_deceleration_list.Count) && (pos >= dist_deceleration_list[dist_deceleration_idx])) {
-                    dist_deceleration = dist_deceleration_list[dist_deceleration_idx++];
+                if (pos >= dist_deceleration) {
+                    dist_deceleration = (dist_deceleration_q.Count > 0) ? dist_deceleration_q.Dequeue(): 9e99;
                     a = -a_loco;
                 }
 
