@@ -62,10 +62,9 @@ namespace Ralway{
         }
     }
 
-
     class Game{
         static void Main(string[] args){
-            Branch branch = new Branch();
+            //Branch branch = new Branch();
 
             double a_loco = 0.2;    // m/s^2
             const double speed_max_loco_restrict = 120 / 3.6; // m/s
@@ -84,16 +83,18 @@ namespace Ralway{
                     double dist = double.Parse(data[2]);
                     double length = dist - last_dist;
                     last_dist = dist;
-                    branch.AddElement(name, length);
+                    //branch.AddElement(name, length);
                     stations_map.Add(dist, name);
                 }
+                //branch.Dump();
             }
-
             SortedList<double, double> speed_map = new SortedList<double, double>();
+
             using (StreamReader reader = File.OpenText(@"D:\Win7\lis\Documents\Dev\RW\Выборг.speed")) {
                 string text;
-                while ((text = reader.ReadLine()) != null) {
-                    if (text.Length < 1 || text[0] == '#') {
+                while ((text = reader.ReadLine() )!= null) {
+                    text = text.Trim();
+                    if (text.Length < 1 || text.StartsWith("#")) {
                         continue;
                     }
                     string[] data = text.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
@@ -119,8 +120,6 @@ namespace Ralway{
                 }
                 prev_speed_restrict = speed_restrict;
             }
-
-            branch.Dump();
 
             DateTime date0 = new DateTime(2009, 5, 1, 16, 30, 0);
             Console.Write("{0}\n", date0);
@@ -149,7 +148,6 @@ namespace Ralway{
                         next_speed_restict = (next_speed_restict > speed_max_loco_restrict)
                                         ? speed_max_loco_restrict
                                         : next_speed_restict;
-
                     }
                 }
 
