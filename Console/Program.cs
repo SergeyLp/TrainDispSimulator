@@ -7,7 +7,7 @@ using System.Globalization;
 using System.Diagnostics;
 using System.Threading;
 
-namespace Ralway{
+namespace Ralway {
 
     public class Branch {
 
@@ -21,7 +21,7 @@ namespace Ralway{
             public NamedNode next { get; set; }
             public string name { get; set; }
 
-            public NamedNode(string new_name, RType type = RType.block, Block prev = null, Block next = null){
+            public NamedNode(string new_name, RType type = RType.block, Block prev = null, Block next = null) {
                 name = new_name;
                 type_ = type;
                 this.prev = prev;
@@ -30,29 +30,28 @@ namespace Ralway{
         }
 
         public class Block : NamedNode {
-            public double len_;
+            private double len_;
 
             public Block(string name, double len, RType type = RType.block, Block prev = null, Block next = null)
-                :base(name, type, prev, next) {
-                len_ = len;
-            }
+                : base(name, type, prev, next) => this.len = len;
 
-            public new string ToString() => String.Format("{0,12} {1,4}", name, len_.ToString("0.0"));
-            
+            public double len { get => len_; set => len_ = value; }
+
+            public new string ToString() => String.Format("{0,12} {1,4}", name, len.ToString("0.0"));
         }
 
         public LinkedList<Block> list = new LinkedList<Block>();
 
-        public  void Dump() {
+        public void Dump() {
             double dist = 0;
             Trace.WriteLine("Branch dump");
             foreach (var li in list) {
                 string s = li.ToString();
 
-                dist += li.len_;
+                dist += li.len;
                 s += "\t";
                 s += dist.ToString();
-                Trace.WriteLine(String.Format("{0}  {1,5}", li.ToString(), dist.ToString("0.0") ));
+                Trace.WriteLine(String.Format("{0}  {1,5}", li.ToString(), dist.ToString("0.0")));
             }
         }
 
@@ -74,6 +73,11 @@ namespace Ralway{
         }
     };
 
+    public class NamedPoint{
+        public double dist { get; set; }
+        public string name { get; set; }
+    }
+
     class Game {
         static void Main(string[] args){
             //Branch branch = new Branch();
@@ -82,8 +86,8 @@ namespace Ralway{
             const double speed_max_loco_restrict = 120 / 3.6; // m/s
             const double dt = 0.05;    // s
 
-            SortedList<double, string> stations_map = new SortedList<double, string>();
-            using (StreamReader reader = File.OpenText(@"D:\Win7\lis\Documents\Dev\RW\Выборг.layout")){
+            Queue<NamedPoint> stations = new Queue<NamedPoint>();
+            using (StreamReader reader = File.OpenText(@"..\..\..\RW\Выборг.layout")){
                 string text;
                 double last_dist = 0;
                 while ((text = reader.ReadLine()) != null) {
@@ -92,19 +96,19 @@ namespace Ralway{
                     }
                     string[] data = text.Split(new char[] { ' ', '\t'}, StringSplitOptions.RemoveEmptyEntries);
                     if (data.Length < 2) continue;
-                    string name = data[0].Replace('_', ' ');
-                    double dist = double.Parse(data[2]) * 1000;
-                    double length = dist - last_dist;
-                    last_dist = dist;
+                    NamedPoint np = new NamedPoint();
+                    np.name = data[0].Replace('_', ' ');
+                    np.dist = double.Parse(data[2]) * 1000; //m
+                    //double length = dist - last_dist;
+                    //last_dist = dist;
                     //branch.AddElement(name, length);
-                    stations_map.Add(dist, name);
+                    stations.Enqueue(np);
                 }
                 //branch.Dump();
             }
-            IList<double> time_points = stations_map.Keys;
 
             SortedList<double, double> speed_map = new SortedList<double, double>();
-            using (StreamReader reader = File.OpenText(@"D:\Win7\lis\Documents\Dev\RW\Выборг.speed")) {
+            using (StreamReader reader = File.OpenText(@"..\..\..\RW\Выборг.speed")) {
                 string text;
                 while ((text = reader.ReadLine() )!= null) {
                     text = text.Trim();
@@ -122,7 +126,7 @@ namespace Ralway{
 
             Trace.WriteLine("Table prepare speed restrict");
             Queue<SpaceDeceleration> dist_decelerations = new Queue<SpaceDeceleration>();
-            double prev_speed_restrict =0;
+            double prev_speed_restrict = 0;
             foreach (var dist in speed_points) {
                 double speed_restrict = speed_map[dist];
                 double delta_speed = speed_restrict - prev_speed_restrict;
@@ -135,10 +139,9 @@ namespace Ralway{
                 prev_speed_restrict = speed_restrict;
             }
 
-            DateTime date0 = new DateTime(2009, 5, 1, 16, 30, 0);
+            DateTime date0 = new DateTime(2009, 5, 1, 7, 18, 0);
             Console.Write("{0}\n", date0);
 
-            int station_number = 0;
             int speed_index = 0;
             double v = 0, v0 =0;    // m/s
             double dp = 0, pos = 0; // m
@@ -146,6 +149,7 @@ namespace Ralway{
             double current_speed_restict = 0;   // m/s
             double next_speed_restict = 0;   // m/s
             SpaceDeceleration space_deceleration = dist_decelerations.Dequeue();
+            NamedPoint next_station = stations.Dequeue();
             double a = a_loco;
             double end_deceleration = 0;
             Queue<SpaceDeceleration> current_decelerations = new Queue<SpaceDeceleration>();
@@ -195,6 +199,11 @@ namespace Ralway{
 
                 if (current_decelerations.Any() && pos > current_decelerations.Peek().end) {
                     current_decelerations.Dequeue();
+                    if (!current_decelerations.Any()) {
+                        Trace.WriteLine(String.Format("A^ at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
+                        a = +a_loco;
+                    }
+
                     Trace.WriteLine(String.Format("C- at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
                 }
 
@@ -203,11 +212,12 @@ namespace Ralway{
                 pos += dp;
                 v0 = v;
 
-                Console.Write("{0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos/1000, v * 3.6);
+                Console.Write("{0,-8:t}{1,7:##0.000}{2,7:##0.0}", date, pos/1000, v * 3.6);
 
-                if (pos >= time_points[station_number]) {
-                    Console.Write("  {0}\n", stations_map[time_points[station_number]]);
-                    if (++station_number == time_points.Count) break;
+                if (pos >= next_station.dist) {
+                    Console.Write("  {0}\n", next_station.name);
+                    if (!stations.Any()) break;
+                    next_station = stations.Dequeue();
                 } else {
                     if (v > current_speed_restict + 0.5) {
                         Console.Write("  {0:##0.0} !\n", current_speed_restict * 3.6);
