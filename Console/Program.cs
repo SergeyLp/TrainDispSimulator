@@ -62,8 +62,11 @@ namespace Ralway {
     }
 
 
-    public class PointPos{
+    public class PointPos {
         public double pos { get; set; }
+        public PointPos(PointPos po) => pos = po.pos;
+        public PointPos(double po) => pos = po;
+        public PointPos() { }
     }
 
     public class NamedPoint: PointPos{
@@ -137,15 +140,13 @@ namespace Ralway {
                     double t = -delta_speed / a_loco;
                     double space = prev_speed_restrict * t + a_loco * t * t / 2;
                     DecelerationDistance dec_dist = new DecelerationDistance();
-                    PointPos pp = new PointPos();
-                    dec_dist.begin = pp;
+                    //dec_dist.begin = pp;
                     SpeedPoint spp = new SpeedPoint();
                     dec_dist.sp = spp;
                     dec_dist.sp.pos = sp.pos;
                     dec_dist.sp.speed = sp.speed;
-                    dec_dist.begin.pos = sp.pos - space;
-                    //sd.pos = sp.pos;
-                    //sd.target_speed = speed_restrict;
+                    PointPos pp = new PointPos(sp.pos - space);
+                    dec_dist.begin = pp;
                     Trace.Write(String.Format("{0} {1} {2:##0.0} {3:##0.0}\n", prev_speed_restrict * 3.6, speed_restrict * 3.6, (sp.pos - space)/1000, sp.pos / 1000));
                     dist_decelerations.Enqueue(dec_dist);
                 }
