@@ -6,6 +6,7 @@ using System.Text;
 using System.Globalization;
 using System.Diagnostics;
 using System.Threading;
+using NLog;
 
 namespace Ralway {
 
@@ -61,7 +62,6 @@ namespace Ralway {
         }
     }
 
-
     public class PointPos {
         public double pos { get; set; }
         public PointPos(PointPos po) => pos = po.pos;
@@ -83,13 +83,136 @@ namespace Ralway {
         //public double begin { get; set; }
         //public double target_speed { get; set; }
     };
+    public class Ai {
+        const double a_loco = 0.15;    // m/s^2
+        const double speed_max_loco_restrict = 120 / 3.6; // m/s
+        internal Queue<DecelerationDistance> dist_decelerations;
+        double end_deceleration = 0;
+        DecelerationDistance space_deceleration;
+        double current_speed_restict = 0;   // m/s
+        double a = 0;
+
+        SpeedPoint current_sp;
+        Queue<DecelerationDistance> current_decelerations = new Queue<DecelerationDistance>();
+        internal Queue<SpeedPoint> speed_points;
+
+        internal void reset() {
+            space_deceleration = dist_decelerations.Dequeue();
+            current_sp = speed_points.Dequeue();
+        }
+
+        internal void buildPrepareForSpeedrestrictTable(Queue<SpeedPoint> speed_points_) {
+            speed_points = speed_points_;
+            Trace.WriteLine("Table prepare speed restrict");
+            dist_decelerations = new Queue<DecelerationDistance>();
+            double prev_speed_restrict = 0;
+            foreach (var sp in speed_points) {
+                double speed_restrict = sp.speed;//speed_map[dist];
+                double delta_speed = speed_restrict - prev_speed_restrict;
+                if (delta_speed < 0) {
+                    double t = -delta_speed / a_loco;
+                    double space = prev_speed_restrict * t + a_loco * t * t / 2;
+                    DecelerationDistance dec_dist = new DecelerationDistance();
+                    SpeedPoint spp = new SpeedPoint();
+                    dec_dist.sp = spp;
+                    dec_dist.sp.pos = sp.pos;
+                    dec_dist.sp.speed = sp.speed;
+                    PointPos pp = new PointPos(sp.pos - space);
+                    dec_dist.begin = pp;
+                    Trace.Write(String.Format("{0} {1} {2:##0.0} {3:##0.0}\n", prev_speed_restrict * 3.6, speed_restrict * 3.6, (sp.pos - space) / 1000, sp.pos / 1000));
+                    dist_decelerations.Enqueue(dec_dist);
+                }
+                prev_speed_restrict = speed_restrict;
+            }
+        }
+
+        internal double getAcceleration(double pos, double v) {
+            void TracePosSpeed(string header/*double pos, double v*/) {
+                Trace.Write(header);
+                Trace.WriteLine(String.Format(" at   {0:##0.000}  {1:##0.0}", pos / 1000, v * 3.6)); //{0,-8:t} ti
+            }
+
+            if (pos >= current_sp.pos) {
+                current_speed_restict = (current_sp.speed > speed_max_loco_restrict)
+                                ? speed_max_loco_restrict
+                                : current_sp.speed;
+                Console.Write("\t[{0}]\n", current_sp.speed * 3.6);
+                if (speed_points.Any()) {
+                    current_sp = speed_points.Dequeue();
+                } else {
+                    current_sp.pos = 99e99;
+                }
+                if (a == 0)
+                    if (!current_decelerations.Any()) {
+                        a = +a_loco;
+                        TracePosSpeed("A+");
+                    } else if (current_decelerations.Count == 1) {
+                        if (v < current_decelerations.Peek().sp.speed) {
+                            a = a + a_loco;
+                            TracePosSpeed("A~");
+                        }
+
+                    }
+            }
+
+            if (a < 0 && (pos > space_deceleration.begin.pos || v < space_deceleration.sp.speed)) {
+                a = 0;
+                TracePosSpeed("A0");
+            }
+
+            if (v > current_speed_restict - 0.05 && a > 0) {
+                TracePosSpeed("A\\");
+                a = 0;
+            }
+
+            if (pos >= space_deceleration.begin.pos) {
+                current_decelerations.Enqueue(space_deceleration);
+                TracePosSpeed("C+");
+                end_deceleration = space_deceleration.begin.pos;
+                if (dist_decelerations.Count > 0) {
+                    space_deceleration = dist_decelerations.Dequeue();
+                } else {
+                    space_deceleration.begin.pos = 99e99;
+                }
+
+                TracePosSpeed("A-");
+                a = -a_loco;
+            }
+
+            if (current_decelerations.Any() && pos > current_decelerations.Peek().sp.pos) {
+                current_decelerations.Dequeue();
+                if (!current_decelerations.Any()) {
+                    TracePosSpeed("A^");
+                    a = +a_loco;
+                }
+                TracePosSpeed("C-");
+            }
+
+            if (v > current_speed_restict + 0.1) {
+                Console.Write("  {0:##0.0} !\n", current_speed_restict * 3.6);
+                TracePosSpeed(String.Format("*! {0}", current_speed_restict * 3.6));
+                //v = current_speed_restict;
+            }
+                return a;
+        }
+    }
+
+    public class Driver { }
+    public class RollingStock {
+
+    }
+    public class Locomotion : RollingStock { }
+    public class Wagon : RollingStock { }
+
+    public class Consist { }
+
 
     class Game {
+
         static void Main(string[] args){
+
             Branch branch = new Branch();
 
-            const double a_loco = 0.15;    // m/s^2
-            const double speed_max_loco_restrict = 120 / 3.6; // m/s
             const double dt = 0.05;    // s
 
             Queue<NamedPoint> stations = new Queue<NamedPoint>();
@@ -130,107 +253,29 @@ namespace Ralway {
                 }
             }
 
-            Trace.WriteLine("Table prepare speed restrict");
-            Queue<DecelerationDistance> dist_decelerations = new Queue<DecelerationDistance>();
-            double prev_speed_restrict = 0;
-            foreach (var sp in speed_points) {
-                double speed_restrict = sp.speed;//speed_map[dist];
-                double delta_speed = speed_restrict - prev_speed_restrict;
-                if (delta_speed < 0) {
-                    double t = -delta_speed / a_loco;
-                    double space = prev_speed_restrict * t + a_loco * t * t / 2;
-                    DecelerationDistance dec_dist = new DecelerationDistance();
-                    //dec_dist.begin = pp;
-                    SpeedPoint spp = new SpeedPoint();
-                    dec_dist.sp = spp;
-                    dec_dist.sp.pos = sp.pos;
-                    dec_dist.sp.speed = sp.speed;
-                    PointPos pp = new PointPos(sp.pos - space);
-                    dec_dist.begin = pp;
-                    Trace.Write(String.Format("{0} {1} {2:##0.0} {3:##0.0}\n", prev_speed_restrict * 3.6, speed_restrict * 3.6, (sp.pos - space)/1000, sp.pos / 1000));
-                    dist_decelerations.Enqueue(dec_dist);
-                }
-                prev_speed_restrict = speed_restrict;
-            }
+            Ai ai = new Ai();
+            ai.buildPrepareForSpeedrestrictTable(speed_points);
 
-            DateTime date0 = new DateTime(2009, 5, 1, 7, 18, 0);
-            Console.Write("{0}\n", date0);
+            DateTime t0 = new DateTime(2009, 5, 1, 7, 18, 0);
+            Console.Write("{0}\n", t0);
 
             double v = 0, v0 =0;    // m/s
             double dp = 0, pos = 0; // m
             double sec_from_0 = 0;  // s
-            double current_speed_restict = 0;   // m/s
-            DecelerationDistance space_deceleration = dist_decelerations.Dequeue();
             NamedPoint next_station = stations.Dequeue();
-            double a = a_loco;
-            double end_deceleration = 0;
-            SpeedPoint current_sp = speed_points.Dequeue();
-            Queue<DecelerationDistance> current_decelerations = new Queue<DecelerationDistance>();
+            //double a = 0;
+            ai.reset();
             for (; ; ) {
-                DateTime date = date0.AddSeconds(sec_from_0);
+                DateTime ti = t0.AddSeconds(sec_from_0);
 
-                if (pos >= current_sp.pos) { 
-                    current_speed_restict = (current_sp.speed > speed_max_loco_restrict)
-                                    ? speed_max_loco_restrict
-                                    : current_sp.speed;
-                    Console.Write("\t[{0}]\n", current_sp.speed*3.6);
-                    if (speed_points.Any()){
-                        current_sp = speed_points.Dequeue();
-                    } else {
-                        current_sp.pos = 99e99;
-                    }
-                    if (a == 0)
-                        if (!current_decelerations.Any()) {
-                            a = +a_loco;
-                            Trace.WriteLine(String.Format("A+ at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
-                        } else if (current_decelerations.Count == 1){
-                            if (v < current_decelerations.Peek().sp.speed) {
-                                a = a + a_loco;
-                                Trace.WriteLine(String.Format("A~ at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
-                            }
-                                
-                        }
-                }
-
-                if (a < 0 && (pos > space_deceleration.begin.pos || v < space_deceleration.sp.speed) ) { 
-                    a = 0;
-                    Trace.WriteLine(String.Format("A0 at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
-                }
-
-                if (v > current_speed_restict - 0.05 && a > 0) {
-                    Trace.WriteLine(String.Format("A\\ at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
-                    a = 0;
-                }
-
-                if (pos >= space_deceleration.begin.pos) {
-                    current_decelerations.Enqueue(space_deceleration);
-                    Trace.WriteLine(String.Format("C+ at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
-                    end_deceleration = space_deceleration.begin.pos;
-                    if (dist_decelerations.Count > 0) {
-                        space_deceleration = dist_decelerations.Dequeue();
-                    } else {
-                        space_deceleration.begin.pos = 99e99;
-                    }
-
-                    Trace.WriteLine(String.Format("A- at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
-                    a = -a_loco;
-                }
-
-                if (current_decelerations.Any() && pos > current_decelerations.Peek().sp.pos) {
-                    current_decelerations.Dequeue();
-                    if (!current_decelerations.Any()) {
-                        Trace.WriteLine(String.Format("A^ at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
-                        a = +a_loco;
-                    }
-                    Trace.WriteLine(String.Format("C- at {0,-8:t}  {1:##0.000}  {2:##0.0}", date, pos / 1000, v * 3.6));
-                }
+                double a = ai.getAcceleration(pos, v);
 
                 v = v0 + a * dt;
                 dp = (v0 + v)/2 * dt ;
                 pos += dp;
                 v0 = v;
 
-                Console.Write("\r{0,-8:t}{1,7:##0.000}{2,7:##0.0}", date, pos/1000, v * 3.6);
+                Console.Write("\r{0,-8:t}{1,7:##0.000}{2,7:##0.0}", ti, pos/1000, v * 3.6);
 
                     if (pos >= next_station.pos) {
                         Console.Write("  {0}\n", next_station.name);
@@ -238,13 +283,7 @@ namespace Ralway {
                             break;
                         else
                             next_station = stations.Dequeue();
-                    } else {
-                        if (v > current_speed_restict + 0.1) {
-                        Console.Write("  {0:##0.0} !\n", current_speed_restict * 3.6);
-                        Trace.WriteLine(String.Format("*! at {0,-8:t}  {1:##0.000}  {2:##0.0}  {3:##0.0}", date, pos / 1000, v * 3.6, current_speed_restict * 3.6));
-                        v = current_speed_restict;
                     }
-                }
                 //Thread.Sleep(5);
                 sec_from_0 += dt;
             }
