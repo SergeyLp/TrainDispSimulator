@@ -93,7 +93,6 @@ namespace Ralway {
         const double speed_max_loco_restrict = 120 / 3.6; // m/s
 
         Queue<DecelerationDistance> decelerations_distances;
-        //double end_deceleration = 0;
         DecelerationDistance deceleration_distance;
 
         double current_speed_restict = 0;   // m/s
@@ -136,8 +135,7 @@ namespace Ralway {
         internal double getAcceleration(double pos, double v) {
             void TracePosSpeed(string header) =>
                 Trace.WriteLine(String.Format("{0} at   {1:##0.000}  {2:##0.0}",header, pos / 1000, v * 3.6)); //{0,-8:t} ti
-            
-            if (pos >= current_sp.pos) {
+            void changeCurrentSpeedRestrict() {
                 current_speed_restict = (current_sp.speed > speed_max_loco_restrict)
                                 ? speed_max_loco_restrict
                                 : current_sp.speed;
@@ -147,14 +145,33 @@ namespace Ralway {
                 } else {
                     current_sp.pos = 99e99;
                 }
+            }
+
+            if (v > current_speed_restict + 0.1) {
+                if (a >= 0) {
+                    Console.Write("  *{0:##0}* !\n", current_speed_restict * 3.6);
+                    TracePosSpeed(String.Format("A| {0}", current_speed_restict * 3.6));
+                }
+                a = -a_loco * 2;
+                return a;
+            }
+
+            if (v > current_speed_restict - 0.05 && a > 0) {
+                a = 0;
+                TracePosSpeed("A\\");
+            }
+
+            if (pos >= current_sp.pos) {
+                changeCurrentSpeedRestrict();
                 if (a == 0)
                     if (!current_decelerations.Any()) {
                         a = +a_loco;
                         TracePosSpeed("A+");
                     } else if (current_decelerations.Count == 1) {
                         if (v < current_decelerations.Peek().sp.speed) {
-                            a = a + a_loco;
-                            TracePosSpeed("A~");
+                            current_speed_restict = current_decelerations.Peek().sp.speed;
+                            a = + a_loco;
+                            TracePosSpeed("A/");
                         }
                     }
             }
@@ -164,10 +181,6 @@ namespace Ralway {
                 TracePosSpeed("A0");
             }
 
-            if (v > current_speed_restict - 0.05 && a > 0) {
-                TracePosSpeed("A\\");
-                a = 0;
-            }
 
             if (pos >= deceleration_distance.begin.pos) {
                 current_decelerations.Enqueue(deceleration_distance);
@@ -192,10 +205,6 @@ namespace Ralway {
                 TracePosSpeed("C-");
             }
 
-            if (v > current_speed_restict + 0.1) {
-                Console.Write("  {0:##0.0} !\n", current_speed_restict * 3.6);
-                TracePosSpeed(String.Format("*! {0}", current_speed_restict * 3.6));
-            }
             return a;
         }
     }
