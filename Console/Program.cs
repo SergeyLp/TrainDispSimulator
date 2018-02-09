@@ -168,6 +168,19 @@ namespace Ralway {
                         a = +a_loco;
                         TracePosSpeed("A+");
                     } else if (current_decelerations.Count == 1) {
+                        /*
+                        double delta_speed = v - current_decelerations.Peek().sp.speed;
+                        double t = -delta_speed / a_loco;
+
+                        double space = v * t + a_loco * t * t / 2 + 700; // Запас для выбега
+                        double pos_dec = current_decelerations.Peek().sp.pos - space;
+
+                        if (pos < pos_dec) {
+                            a = +a_loco;
+                            TracePosSpeed("W+");
+                            return a;
+                        }
+                        */
                         if (v < current_decelerations.Peek().sp.speed) {
                             current_speed_restict = current_decelerations.Peek().sp.speed;
                             a = + a_loco;
@@ -175,12 +188,37 @@ namespace Ralway {
                         }
                     }
             }
-
+/*
+            if (a < 0) {
+                if (current_decelerations.Any()) {
+                    double a_min = 0;
+                    foreach (var cc in current_decelerations) {
+                        if (pos >= cc.begin.pos && v < cc.sp.speed) {
+                            a = 0;
+                        } else {
+                            a = -a_loco;
+                        }
+                        if (a < a_min) {
+                            a_min = a;
+                        }
+                    }
+                    a = a_min;
+                    TracePosSpeed("A0");
+                } else {
+                    if (v < current_speed_restict) {
+                        a = 0;
+                        TracePosSpeed("A%");
+                    }
+                }
+                return a;
+            }
+*/
+///*
             if (a < 0 && (pos > deceleration_distance.begin.pos || v < deceleration_distance.sp.speed)) {
                 a = 0;
                 TracePosSpeed("A0");
             }
-
+//            */
 
             if (pos >= deceleration_distance.begin.pos) {
                 current_decelerations.Enqueue(deceleration_distance);
