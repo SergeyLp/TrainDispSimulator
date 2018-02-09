@@ -77,7 +77,11 @@ namespace Ralway {
         public double speed { get; set; }
     }
 
-    public class DecelerationDistance /* : PointPos*/{
+    public class DecelerationDistance {
+        public DecelerationDistance() {
+            sp = new SpeedPoint();
+            begin = new PointPos();
+        }
         public SpeedPoint sp { get; set; }
         public PointPos begin { get; set; }
         //public double begin { get; set; }
@@ -89,7 +93,7 @@ namespace Ralway {
         const double speed_max_loco_restrict = 120 / 3.6; // m/s
 
         Queue<DecelerationDistance> decelerations_distances;
-        double end_deceleration = 0;
+        //double end_deceleration = 0;
         DecelerationDistance deceleration_distance;
 
         double current_speed_restict = 0;   // m/s
@@ -113,23 +117,19 @@ namespace Ralway {
         void buildPrepareForSpeedrestrictTable() {
             Trace.WriteLine("Table prepare speed restrict");
             double prev_speed_restrict = 0;
-            foreach (var sp in speed_points) {
-                double speed_restrict = sp.speed;//speed_map[dist];
-                double delta_speed = speed_restrict - prev_speed_restrict;
+            foreach (var restrict in speed_points) {
+                double delta_speed = restrict.speed - prev_speed_restrict;
                 if (delta_speed < 0) {
-                    double t = -delta_speed / a_loco;
+                    double t = -delta_speed / a_loco;   // Time for deceleration
                     double space = prev_speed_restrict * t + a_loco * t * t / 2;
-                    DecelerationDistance dec_dist = new DecelerationDistance();
-                    SpeedPoint spp = new SpeedPoint();
-                    dec_dist.sp = spp;
-                    dec_dist.sp.pos = sp.pos;
-                    dec_dist.sp.speed = sp.speed;
-                    PointPos pp = new PointPos(sp.pos - space);
-                    dec_dist.begin = pp;
-                    Trace.Write(String.Format("{0} {1} {2:##0.0} {3:##0.0}\n", prev_speed_restrict * 3.6, speed_restrict * 3.6, (sp.pos - space) / 1000, sp.pos / 1000));
+                    DecelerationDistance dec_dist = new DecelerationDistance {
+                        sp = restrict,
+                        begin = new PointPos(restrict.pos - space)
+                    };
                     decelerations_distances.Enqueue(dec_dist);
+                    Trace.Write(string.Format("{0} {1} {2:##0.0} {3:##0.0}\n", prev_speed_restrict * 3.6, restrict.speed * 3.6, (restrict.pos - space) / 1000, restrict.pos / 1000));
                 }
-                prev_speed_restrict = speed_restrict;
+                prev_speed_restrict = restrict.speed;
             }
         }
 
