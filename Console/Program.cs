@@ -10,7 +10,7 @@ using System.Threading;
 
 namespace Ralway {
 
-    public class Branch {
+    class Branch {
 
         public class NamedNode {
             public enum RType {
@@ -62,22 +62,22 @@ namespace Ralway {
         }
     }
 
-    public class PointPos {
+    class PointPos {
         public double pos { get; set; }
         public PointPos(PointPos po) => pos = po.pos;
         public PointPos(double po) => pos = po;
         public PointPos() { }
     }
 
-    public class NamedPoint: PointPos{
+    class NamedPoint: PointPos{
         public string name { get; set; }
     }
 
-    public class SpeedPoint : PointPos{
+    class SpeedPoint : PointPos{
         public double speed { get; set; }
     }
 
-    public class DecelerationDistance {
+    class DecelerationDistance {
         public DecelerationDistance() {
             sp = new SpeedPoint();
             begin = new PointPos();
@@ -247,14 +247,14 @@ namespace Ralway {
         }
     }
 
-    public class Driver { }
-    public class RollingStock {
+    class Driver { }
+    class RollingStock {
 
     }
-    public class Locomotion : RollingStock { }
-    public class Wagon : RollingStock { }
+    class Locomotion : RollingStock { }
+    class Wagon : RollingStock { }
 
-    public class Consist { }
+    class Consist { }
 
 
     class Game {

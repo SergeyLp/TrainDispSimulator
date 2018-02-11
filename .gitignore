@@ -1,3 +1,4 @@
 RW/
 /Console/packages.config
 /Console/obj/Release
+/GUI/obj/Release/GUI.csproj.CoreCompileInputs.cache
